@@ -1,10 +1,8 @@
-python
-streamlit 
-pandas 
-numpy 
-numpy_financial 
-datetime import date
-dateutil.relativedelta import relativedelta
-plotly.express as px
-plotly.graph_objects as go
-io
+streamlit>=1.38.0
+pandas>=2.0.0
+numpy>=1.26.0
+numpy-financial>=1.0.0
+python-dateutil>=2.8.0
+plotly>=5.18.0
+openpyxl>=3.1.0
+xlsxwriter>=3.2.0
