@@ -1,6 +1,5 @@
 # app.py
-# Petroleum Project Economics Dashboard - OpEx per well + Maintenance with dates
-# Run with: streamlit run app.py
+# Petroleum Project Economics Dashboard - OpEx per well + Maintenance with dates + fixed duplicate keys
 
 import streamlit as st
 import pandas as pd
@@ -15,7 +14,7 @@ import io
 st.set_page_config(page_title="Petroleum Economics Dashboard", layout="wide")
 
 # ───────────────────────────────────────────────
-# Session state initialization
+# Session state
 # ───────────────────────────────────────────────
 
 if 'wells' not in st.session_state:
@@ -28,28 +27,29 @@ if 'run_clicked' not in st.session_state:
     st.session_state.run_clicked = False
 
 # ───────────────────────────────────────────────
-# Sidebar - Inputs
+# Sidebar Inputs
 # ───────────────────────────────────────────────
 
 st.sidebar.title("Project Inputs")
 
-# ── Time frame ───────────────────────────────────
+# Time frame
 col1, col2 = st.sidebar.columns(2)
-start_date = col1.date_input("Study Start Date", date(2025, 6, 1))
-end_date   = col2.date_input("Study End Date",   date(2030, 6, 1))
+start_date = col1.date_input("Study Start Date", date(2025, 6, 1), key="global_start_date")
+end_date   = col2.date_input("Study End Date",   date(2030, 6, 1), key="global_end_date")
 
-# ── Global economic parameters ───────────────────
+# Global params
 st.sidebar.subheader("Economic Parameters")
-annual_decline_pct  = st.sidebar.slider("Annual Decline Rate (%)",  0.0, 50.0, 10.0, step=0.5) / 100
-annual_discount_pct = st.sidebar.slider("Annual Discount Rate (%)", 0.0, 30.0, 10.0, step=0.5) / 100
+annual_decline_pct  = st.sidebar.slider("Annual Decline Rate (%)",  0.0, 50.0, 10.0, step=0.5, key="decline_rate") / 100
+annual_discount_pct = st.sidebar.slider("Annual Discount Rate (%)", 0.0, 30.0, 10.0, step=0.5, key="discount_rate") / 100
 
-# Oil price selection
+# Oil prices
 oil_prices = st.sidebar.multiselect(
     "Oil Price Scenarios (USD/bbl)",
     options=[40, 50, 60, 70, 80, 90, 100, 110, 120, 130, 150, 200],
-    default=[60, 70, 80]
+    default=[60, 70, 80],
+    key="oil_price_scenarios"
 )
-custom_price = st.sidebar.number_input("Add custom oil price (USD/bbl)", min_value=0.0, value=0.0, step=1.0)
+custom_price = st.sidebar.number_input("Add custom oil price (USD/bbl)", min_value=0.0, value=0.0, step=1.0, key="custom_oil_price")
 if custom_price > 0 and custom_price not in oil_prices:
     oil_prices.append(custom_price)
 
@@ -57,13 +57,13 @@ if custom_price > 0 and custom_price not in oil_prices:
 st.sidebar.subheader("Add Wells")
 
 with st.sidebar.expander("New Well", expanded=True):
-    well_name     = st.text_input("Well Name / ID", "")
-    well_capex    = st.number_input("CapEx (MM USD)", 0.0, 100.0, 4.0, step=0.1)
-    drill_date    = st.date_input("Drill / First Oil Date", start_date)
-    initial_rate  = st.number_input("Initial Oil Rate (bbl/day)", 0.0, 5000.0, 400.0, step=10.0)
-    opex_per_bbl  = st.number_input("OpEx per bbl (USD)", 0.0, 100.0, 10.0, step=0.5)
+    well_name     = st.text_input("Well Name / ID", "", key="new_well_name")
+    well_capex    = st.number_input("CapEx (MM USD)", 0.0, 100.0, 4.0, step=0.1, key="new_well_capex")
+    drill_date    = st.date_input("Drill / First Oil Date", start_date, key="new_well_drill_date")
+    initial_rate  = st.number_input("Initial Oil Rate (bbl/day)", 0.0, 5000.0, 400.0, step=10.0, key="new_well_rate")
+    opex_per_bbl  = st.number_input("OpEx per bbl (USD)", 0.0, 100.0, 10.0, step=0.5, key="new_well_opex")
 
-    if st.button("Add Well") and well_name.strip():
+    if st.button("Add Well", key="add_well_button") and well_name.strip():
         st.session_state.wells.append({
             "name": well_name.strip(),
             "capex_mm": well_capex,
@@ -83,7 +83,7 @@ if st.session_state.wells:
         if col2.button("🗑", key=f"del_well_{idx}", help="Remove well"):
             st.session_state.wells.pop(idx)
             st.rerun()
-    if st.sidebar.button("Clear All Wells"):
+    if st.sidebar.button("Clear All Wells", key="clear_wells"):
         st.session_state.wells = []
         st.rerun()
 
@@ -91,11 +91,11 @@ if st.session_state.wells:
 st.sidebar.subheader("Project Capex Items")
 
 with st.sidebar.expander("Add Project Capex"):
-    desc  = st.text_input("Description", "")
-    amt   = st.number_input("Amount (MM USD)", 0.0, 1000.0, 10.0, step=1.0)
-    dt    = st.date_input("Spend Date", start_date)
+    desc  = st.text_input("Description", "", key="proj_capex_desc")
+    amt   = st.number_input("Amount (MM USD)", 0.0, 1000.0, 10.0, step=1.0, key="proj_capex_amt")
+    dt    = st.date_input("Spend Date", start_date, key="proj_capex_date")
 
-    if st.button("Add Project Capex") and desc.strip():
+    if st.button("Add Project Capex", key="add_proj_capex") and desc.strip():
         st.session_state.project_capex.append({
             "description": desc.strip(),
             "capex_mm": amt,
@@ -109,19 +109,19 @@ if st.session_state.project_capex:
         col1, col2 = st.sidebar.columns([5, 1])
         label = f"{item['description']} | ${item['capex_mm']:.1f} MM | {item['date']}"
         col1.markdown(label)
-        if col2.button("🗑", key=f"del_proj_{idx}", help="Remove"):
+        if col2.button("🗑", key=f"del_proj_capex_{idx}", help="Remove"):
             st.session_state.project_capex.pop(idx)
             st.rerun()
 
-# ── Maintenance Costs (with spend date) ───────────
+# ── Maintenance Costs ─────────────────────────────
 st.sidebar.subheader("Maintenance Costs")
 
 with st.sidebar.expander("Add Maintenance Item"):
-    m_desc  = st.text_input("Description (e.g. Platform overhaul)", "")
-    m_amt   = st.number_input("Amount (MM USD)", 0.0, 50.0, 1.0, step=0.5)
-    m_date  = st.date_input("Spend Date", start_date)
+    m_desc  = st.text_input("Description (e.g. Platform overhaul)", "", key="maint_desc")
+    m_amt   = st.number_input("Amount (MM USD)", 0.0, 50.0, 1.0, step=0.5, key="maint_amt")
+    m_date  = st.date_input("Spend Date", start_date, key="maint_date")
 
-    if st.button("Add Maintenance") and m_desc.strip():
+    if st.button("Add Maintenance", key="add_maint") and m_desc.strip():
         st.session_state.maintenance_items.append({
             "description": m_desc.strip(),
             "amount_mm": m_amt,
@@ -135,12 +135,12 @@ if st.session_state.maintenance_items:
         col1, col2 = st.sidebar.columns([5, 1])
         label = f"{item['description']} | ${item['amount_mm']:.1f} MM | {item['date']}"
         col1.markdown(label)
-        if col2.button("🗑", key=f"del_maint_{idx}", help="Remove maintenance item"):
+        if col2.button("🗑", key=f"del_maint_{idx}", help="Remove maintenance"):
             st.session_state.maintenance_items.pop(idx)
             st.rerun()
 
 # ───────────────────────────────────────────────
-# Main Area
+# Main Content
 # ───────────────────────────────────────────────
 
 st.title("Petroleum Project Economics Dashboard")
@@ -148,23 +148,19 @@ st.title("Petroleum Project Economics Dashboard")
 if not st.session_state.wells:
     st.info("→ Add at least one well to run the model.")
 else:
-    if st.button("RUN ECONOMIC MODEL", type="primary", use_container_width=True):
+    if st.button("RUN ECONOMIC MODEL", type="primary", use_container_width=True, key="run_model"):
         st.session_state.run_clicked = True
 
     if st.session_state.run_clicked:
-
         with st.spinner("Calculating..."):
 
-            # ── Timeline ───────────────────────────────────────
+            # Timeline
             months = []
             current = date(start_date.year, start_date.month, 1)
             end = date(end_date.year, end_date.month, end_date.day)
 
             while current <= end:
-                if current.month == 12:
-                    next_start = date(current.year + 1, 1, 1)
-                else:
-                    next_start = date(current.year, current.month + 1, 1)
+                next_start = date(current.year + (current.month == 12), (current.month % 12) + 1, 1)
                 days = (next_start - current).days
                 months.append({"date": current, "days": days, "month_idx": len(months)})
                 current = next_start
@@ -175,10 +171,10 @@ else:
             monthly_discount_rate  = annual_discount_pct / 12
 
             df["gross_production_bbl"] = 0.0
-            df["opex_mm"]              = 0.0
-            df["capex_mm"]             = 0.0
+            df["opex_mm"] = 0.0
+            df["capex_mm"] = 0.0
 
-            # ── Wells ──────────────────────────────────────────
+            # Wells
             for well in st.session_state.wells:
                 drill_dt = date(well["drill_date"].year, well["drill_date"].month, 1)
                 if drill_dt < df["date"].min() or drill_dt > df["date"].max():
@@ -197,14 +193,14 @@ else:
                     if i < len(df) - 1:
                         current_rate *= monthly_decline_factor
 
-            # ── Project Capex ──────────────────────────────────
+            # Project Capex
             for item in st.session_state.project_capex:
                 spend_dt = date(item["date"].year, item["date"].month, 1)
                 idx = df[df["date"] == spend_dt].index
                 if not idx.empty:
                     df.loc[idx, "capex_mm"] += item["capex_mm"]
 
-            # ── Maintenance (lump sum on specific date) ───────
+            # Maintenance (lump-sum on specific date)
             for item in st.session_state.maintenance_items:
                 spend_dt = date(item["date"].year, item["date"].month, 1)
                 idx = df[df["date"] == spend_dt].index
@@ -213,7 +209,7 @@ else:
 
             df["total_cost_mm"] = df["capex_mm"] + df["opex_mm"]
 
-            # ── Scenarios ──────────────────────────────────────
+            # Scenarios
             results = {}
             cum_prod = df["gross_production_bbl"].sum() / 1_000_000
 
@@ -250,38 +246,34 @@ else:
                     "CumProduction_MMbbl": cum_prod
                 }
 
-        # ── Dashboard ──────────────────────────────────────
-
+        # Dashboard
         st.subheader("Key Economic Indicators")
         cols = st.columns(len(results))
-        for i, (price, r) in enumerate(sorted(results.items())):
+        for i, (p, r) in enumerate(sorted(results.items())):
             with cols[i]:
-                st.metric(f"${price}/bbl", f"NPV ${r['NPV_MM']:,.1f} MM", delta=f"IRR {r['IRR_pct']:.1f}%")
+                st.metric(f"${p}/bbl", f"NPV ${r['NPV_MM']:,.1f} MM", delta=f"IRR {r['IRR_pct']:.1f}%")
                 st.caption(f"Payback: {r['Payback']}")
                 st.caption(f"ROI: {r['ROI']:.2f}")
 
-        # Charts (unchanged)
+        # Charts
         tab1, tab2, tab3 = st.tabs(["Production", "Monthly CF", "Cumulative CF"])
-
         with tab1:
             fig_prod = px.line(df, x="date", y="gross_production_bbl", title="Monthly Production (bbl)")
             st.plotly_chart(fig_prod, use_container_width=True)
-
         with tab2:
             fig_cf = go.Figure()
-            for price in sorted(results.keys()):
-                fig_cf.add_trace(go.Scatter(x=df["date"], y=df[f"cashflow_mm_{price}"], name=f"${price}", mode="lines"))
+            for p in sorted(results):
+                fig_cf.add_trace(go.Scatter(x=df["date"], y=df[f"cashflow_mm_{p}"], name=f"${p}", mode="lines"))
             fig_cf.update_layout(title="Monthly Cash Flow (MM USD)")
             st.plotly_chart(fig_cf, use_container_width=True)
-
         with tab3:
             fig_cum = go.Figure()
-            for price in sorted(results.keys()):
-                fig_cum.add_trace(go.Scatter(x=df["date"], y=df[f"cum_cf_{price}"], name=f"${price}", fill="tozeroy"))
+            for p in sorted(results):
+                fig_cum.add_trace(go.Scatter(x=df["date"], y=df[f"cum_cf_{p}"], name=f"${p}", fill="tozeroy"))
             fig_cum.update_layout(title="Cumulative Cash Flow (MM USD)")
             st.plotly_chart(fig_cum, use_container_width=True)
 
-        # ── Export (Option A style) ────────────────────────────────
+        # Export
         st.subheader("Export Results")
 
         def create_excel_export():
@@ -296,7 +288,6 @@ else:
                     ws.write(0, c, val, header_fmt)
                 ws.set_column(0, len(df.columns)-1, 14)
 
-                # Summary
                 summary_data = [{
                     'Oil Price (USD/bbl)': p,
                     'NPV (MM USD)': round(r['NPV_MM'], 2),
@@ -307,7 +298,7 @@ else:
                 } for p, r in sorted(results.items())]
                 pd.DataFrame(summary_data).to_excel(writer, sheet_name='Summary Metrics', index=False)
                 ws_sum = writer.sheets['Summary Metrics']
-                for c, val in enumerate(summary_data[0].keys()):
+                for c, val in enumerate(summary_data[0]):
                     ws_sum.write(0, c, val, header_fmt)
                 ws_sum.set_column(0, 5, 18)
 
@@ -318,7 +309,8 @@ else:
             "Download Cash Flow + Summary (Excel)",
             create_excel_export(),
             f"Petroleum_Economics_{pd.Timestamp.now().strftime('%Y%m%d_%H%M')}.xlsx",
-            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            key="download_excel"
         )
 
 st.sidebar.markdown("---")
