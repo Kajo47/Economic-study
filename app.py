@@ -1,5 +1,5 @@
 # app.py
-# Petroleum Project Economics Dashboard - with Excel export (Option A)
+# Petroleum Project Economics Dashboard - OpEx per well
 # Run with: streamlit run app.py
 
 import streamlit as st
@@ -40,7 +40,6 @@ end_date   = col2.date_input("Study End Date",   date(2030, 6, 1))
 st.sidebar.subheader("Economic Parameters")
 annual_decline_pct  = st.sidebar.slider("Annual Decline Rate (%)",  0.0, 50.0, 10.0, step=0.5) / 100
 annual_discount_pct = st.sidebar.slider("Annual Discount Rate (%)", 0.0, 30.0, 10.0, step=0.5) / 100
-opex_per_bbl        = st.sidebar.number_input("OpEx per bbl (USD)",  0.0, 100.0, 10.0, step=0.5)
 
 # Oil price selection - no upper limit
 oil_prices = st.sidebar.multiselect(
@@ -64,13 +63,15 @@ with st.sidebar.expander("New Well", expanded=True):
     well_capex    = st.number_input("CapEx (MM USD)", 0.0, 100.0, 4.0, step=0.1)
     drill_date    = st.date_input("Drill / First Oil Date", start_date)
     initial_rate  = st.number_input("Initial Oil Rate (bbl/day)", 0.0, 5000.0, 400.0, step=10.0)
+    opex_per_bbl  = st.number_input("OpEx per bbl (USD)", 0.0, 100.0, 10.0, step=0.5)
 
     if st.button("Add Well") and well_name.strip():
         st.session_state.wells.append({
             "name": well_name.strip(),
             "capex_mm": well_capex,
             "drill_date": drill_date,
-            "initial_rate": initial_rate
+            "initial_rate": initial_rate,
+            "opex_per_bbl": opex_per_bbl
         })
         st.success(f"Added: {well_name}")
 
@@ -80,7 +81,7 @@ if st.session_state.wells:
 
     for idx, well in enumerate(st.session_state.wells):
         col1, col2 = st.sidebar.columns([5, 1])
-        label = f"{well['name']} | {well['initial_rate']:.0f} bbl/d | Drill: {well['drill_date']} | ${well['capex_mm']:.1f} MM"
+        label = f"{well['name']} | {well['initial_rate']:.0f} bbl/d | OpEx ${well['opex_per_bbl']:.1f}/bbl | Drill: {well['drill_date']} | ${well['capex_mm']:.1f} MM"
         col1.markdown(label)
         if col2.button("🗑", key=f"del_well_{idx}", help="Remove this well"):
             st.session_state.wells.pop(idx)
@@ -155,9 +156,10 @@ else:
             monthly_discount_rate = annual_discount_pct / 12
 
             df["gross_production_bbl"] = 0.0
+            df["opex_mm"] = 0.0
             df["capex_mm"] = 0.0
 
-            # ── Wells ──────────────────────────────────────────
+            # ── Wells production, capex & opex ───────────────────────────────
             for well in st.session_state.wells:
                 drill_dt = date(well["drill_date"].year, well["drill_date"].month, 1)
                 if drill_dt < df["date"].min() or drill_dt > df["date"].max():
@@ -167,12 +169,19 @@ else:
                 if pd.isna(idx_start):
                     continue
 
+                # Capex (once)
                 df.loc[idx_start, "capex_mm"] += well["capex_mm"]
 
+                # Production & well-specific OpEx
                 current_rate = well["initial_rate"]
                 for i in range(idx_start, len(df)):
                     monthly_bbl = current_rate * df.loc[i, "days"]
                     df.loc[i, "gross_production_bbl"] += monthly_bbl
+                    
+                    # OpEx for this well this month
+                    well_opex_mm = (monthly_bbl * well["opex_per_bbl"]) / 1_000_000
+                    df.loc[i, "opex_mm"] += well_opex_mm
+                    
                     if i < len(df) - 1:
                         current_rate *= monthly_decline_factor
 
@@ -188,7 +197,6 @@ else:
                 monthly_maint = maintenance_annual_mm / 12
                 df["capex_mm"] += monthly_maint
 
-            df["opex_mm"] = df["gross_production_bbl"] * opex_per_bbl / 1_000_000
             df["total_cost_mm"] = df["capex_mm"] + df["opex_mm"]
 
             # ── Scenarios ──────────────────────────────────────
@@ -325,5 +333,4 @@ else:
         )
 
 st.sidebar.markdown("---")
-
-st.sidebar.caption("Petroleum Economics Dashboard • Engineered by Youssif.Sebak")
+st.sidebar.caption("Petroleum Economics Dashboard • Youssif.Sebak)
