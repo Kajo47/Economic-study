@@ -333,4 +333,5 @@ else:
         )
 
 st.sidebar.markdown("---")
-st.sidebar.caption("Petroleum Economics Dashboard • Youssif.Sebak)
+st.sidebar.caption("Petroleum Economics Dashboard • Youssif.Sebak")
+
