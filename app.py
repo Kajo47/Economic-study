@@ -636,15 +636,22 @@ if st.session_state.model_run and st.session_state.results is not None:
                 inputs_json = json.dumps(serialise_inputs(), indent=2, default=str)
                 zf.writestr("model_inputs.json", inputs_json)
 
-                # Charts
+                                                # --- Robust chart export (PNG optional, HTML always included) ---
                 all_dfs = []
                 for price, df in results.items():
                     all_dfs.append(df.assign(price=price))
                 full_df = pd.concat(all_dfs)
+
+                # Build all five charts
                 fig1 = px.line(full_df, x="date", y="contractor_net_cf", color="scenario",
                                title=f"{contractor_label} Net Cash Flow")
                 fig2 = px.line(full_df, x="date", y="government_cf", color="scenario",
                                title=f"{gov_label} Cash Flow")
+                fig3 = px.line(full_df, x="date", y="cum_contractor_cf", color="scenario",
+                               title=f"Cumulative {contractor_label} Net Cash Flow")
+                fig4 = px.line(full_df, x="date", y="cum_government_cf", color="scenario",
+                               title=f"Cumulative {gov_label} Cash Flow")
+
                 npv_list = []
                 for price, df in results.items():
                     npv_list.append({
@@ -658,22 +665,40 @@ if st.session_state.model_run and st.session_state.results is not None:
                     go.Bar(name=gov_label, x=npv_df["Scenario"], y=npv_df[f"{gov_label} NPV"])
                 ])
                 fig5.update_layout(barmode='group', title="NPV by Scenario")
+
+                # Try to add PNGs (kaleido required)
+                png_success = False
                 try:
-                    for name, fig in [("contractor_net_cf", fig1), ("government_cf", fig2), ("npv", fig5)]:
+                    for name, fig in [("contractor_net_cf", fig1), ("government_cf", fig2),
+                                      ("cum_contractor_cf", fig3), ("cum_government_cf", fig4),
+                                      ("npv", fig5)]:
                         img_buf = BytesIO()
-                        fig.write_image(img_buf, format="png")
+                        fig.write_image(img_buf, format="png", engine="kaleido")
                         zf.writestr(f"chart_{name}.png", img_buf.getvalue())
+                    png_success = True
                 except Exception:
-                    try:
-                        html_str = "<html><body>"
-                        html_str += pio.to_html(fig1, full_html=False, include_plotlyjs='cdn')
-                        html_str += pio.to_html(fig2, full_html=False, include_plotlyjs='cdn')
-                        html_str += pio.to_html(fig5, full_html=False, include_plotlyjs='cdn')
-                        html_str += "</body></html>"
-                        zf.writestr("charts.html", html_str)
-                        zf.writestr("charts_README.txt", "PNG export failed; charts saved as HTML (open in browser).")
-                    except Exception as e2:
-                        zf.writestr("charts_README.txt", f"Chart export failed: {e2}")
+                    pass
+
+                # Always write interactive HTML (works without kaleido)
+                try:
+                    html_str = "<html><body>"
+                    html_str += pio.to_html(fig1, full_html=False, include_plotlyjs='cdn')
+                    html_str += pio.to_html(fig2, full_html=False, include_plotlyjs='cdn')
+                    html_str += pio.to_html(fig3, full_html=False, include_plotlyjs='cdn')
+                    html_str += pio.to_html(fig4, full_html=False, include_plotlyjs='cdn')
+                    html_str += pio.to_html(fig5, full_html=False, include_plotlyjs='cdn')
+                    html_str += "</body></html>"
+                    zf.writestr("charts.html", html_str)
+                except Exception:
+                    pass
+
+                # Informative README
+                msg = "Interactive charts: charts.html (open in browser)."
+                if png_success:
+                    msg += " PNG images also included."
+                else:
+                    msg += " PNG export requires kaleido (not installed)."
+                zf.writestr("charts_README.txt", msg)
 
             zip_buffer.seek(0)
             st.download_button("📦 Download ZIP Package", data=zip_buffer, file_name="psa_output_package.zip",
